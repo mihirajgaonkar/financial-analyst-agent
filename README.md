@@ -1,107 +1,165 @@
 # Financial Research Agent
 
-Phase 1 builds the backend foundation for a financial research system. It keeps factual data retrieval in service modules and deterministic finance math in plain Python functions.
+A production-oriented financial research application for analyzing public companies with traceable data, deterministic calculations, LLM-assisted synthesis, LangGraph orchestration, FastAPI, PostgreSQL-ready storage, SEC filing RAG foundations, and a React analyst workspace.
+
+The core design rule is:
+
+```text
+LLM decides what information or analysis is required.
+Tools and APIs retrieve factual information.
+Python performs deterministic financial calculations.
+LLM interprets and synthesizes the results.
+```
+
+The system is intentionally built so model output does not become the source of financial truth. Reported facts come from data providers, calculated metrics come from Python functions, and interpretation is clearly separated.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    CLI[Phase 1 CLI] --> Services
-    Services --> SEC[SEC EDGAR JSON]
-    Services --> FRED[FRED API]
-    Services --> Market[Market Data Provider]
-    Services --> Calc[Deterministic Calculations]
+    UI[React Analyst Workspace] --> API[FastAPI]
+    API --> Jobs[Research Jobs and Threads]
+    API --> Graph[LangGraph Research Workflow]
+
+    Graph --> Understand[Understand Question]
+    Understand --> Agent[Tool-Calling Research Agent]
+    Agent -->|requests facts| Tools[LangChain Tool Layer]
+    Tools --> SEC[SEC EDGAR JSON]
+    Tools --> FRED[FRED Macro Data]
+    Tools --> Market[Market Data Provider]
+    Tools --> Calc[Deterministic Python Calculations]
+    Calc --> Tools
+    SEC --> Tools
+    FRED --> Tools
+    Market --> Tools
+    Tools --> Agent
+    Agent --> Verify[Verification Node]
+    Verify --> Report[Structured Research Report]
+
+    Report --> Storage[(PostgreSQL-ready Storage)]
+    Storage --> Companies[Companies]
+    Storage --> ResearchJobs[Research Jobs]
+    Storage --> Reports[Reports]
+    Storage --> Metrics[Financial Metrics]
+    Storage --> Sources[Source Metadata]
+
+    SEC --> FilingRAG[Filing RAG Pipeline]
+    FilingRAG --> Parse[Section-aware Filing Parser]
+    Parse --> Chunks[Metadata-rich Chunks]
+    Chunks --> Embeddings[Embedding Provider]
+    Embeddings --> VectorStore[Vector Store Interface]
+    VectorStore --> Retrieval[Metadata-filtered Retrieval]
+    Retrieval --> Agent
 ```
 
+## What It Does
+
+- Retrieves company facts, submissions, and filing metadata from SEC EDGAR structured JSON.
+- Retrieves macroeconomic indicators from FRED.
+- Retrieves quotes, price history, and company overviews through a replaceable market-data provider interface.
+- Calculates financial metrics deterministically in Python.
+- Exposes data and calculations to a single LangChain tool-calling research agent.
+- Uses LangGraph to orchestrate the research loop, tool execution, verification, and final report creation.
+- Verifies that numbers cited by the agent exist in tool results.
+- Stores companies, research jobs, reports, financial metrics, source metadata, and filing chunks using SQLAlchemy models.
+- Parses SEC filing text into section-aware RAG chunks.
+- Serves a FastAPI backend and a React/Vite analyst interface.
+
+## Project Layout
+
+```text
+backend/src/financial_research/
+  agents/          single research agent
+  api/             FastAPI app, routes, API schemas, job store
+  calculations/    deterministic finance formulas
+  config/          environment settings
+  graph/           LangGraph state, workflow, verification
+  llm/             configurable LLM factory
+  middleware/      request logging, errors, validation
+  rag/             filing parser, chunker, embeddings, vector store
+  schemas/         Pydantic data contracts
+  services/        SEC, FRED, market-data clients
+  storage/         SQLAlchemy models and repositories
+  tools/           LangChain tool wrappers
+
+frontend/
+  React/Vite analyst workspace
+
+tests/
+  mocked unit and integration-style tests
+```
+
+## Requirements
+
+- Python 3.11+
+- `uv`
+- Node.js and npm
+- API keys for live research, depending on selected providers
+
 ## Setup
+
+From the repository root:
 
 ```powershell
 uv sync
 copy .env.example .env
 ```
 
-Set `SEC_USER_AGENT` to a value that identifies your application and contact information, as required by SEC fair access guidance.
+Edit `.env` and set at least one LLM provider. The default provider is Groq:
 
-## Phase 1 Commands
+```env
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.1-70b-versatile
+```
+
+SEC also requires a descriptive user agent:
+
+```env
+SEC_USER_AGENT="Financial Research Agent your-email@example.com"
+```
+
+Optional provider keys:
+
+```env
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+FRED_API_KEY=your_fred_key
+OPENAI_API_KEY=your_openai_api_key
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+```
+
+## Run The Backend
 
 ```powershell
-uv run python -m financial_research.main --company AAPL
-uv run python -m financial_research.main --macro
-uv run pytest -v
+uv run uvicorn financial_research.api.app:app --reload --app-dir backend/src
 ```
 
-## Data Sources
+Health check:
 
-- SEC EDGAR structured JSON for company tickers, submissions, recent filings, and company facts.
-- FRED API for macroeconomic series.
-- Alpha Vantage behind a replaceable market data provider interface.
-
-## Current Limitations
-
-LangGraph workflow, FastAPI routes, database persistence, RAG, and React frontend are not implemented yet.
-
-## Phase 2
-
-Phase 2 wraps the Phase 1 services and calculations as LangChain tools. Services still perform the work; tools only expose that work to the LLM.
-
-Available tool groups:
-
-- SEC tools: company profile, company facts, latest 10-K, latest 10-Q.
-- Market tools: quote, price history, company overview.
-- Macro tools: FRED indicators and interest rates.
-- Calculation tools: revenue growth, CAGR, margins, P/E, price-to-sales, EV/EBITDA, debt-to-equity.
-
-The single research agent is defined in `financial_research.agents.research_agent`. Its system prompt requires tool use for facts, deterministic tools for arithmetic, source traceability, period labeling, and clear separation of reported facts, calculated metrics, and interpretation.
-
-## Phase 3
-
-Phase 3 adds a LangGraph workflow around the single research agent:
-
-```mermaid
-flowchart TD
-    START --> Understand[Understand Question]
-    Understand --> Agent[Research Agent]
-    Agent -->|tool calls and loop budget remains| Tools[Tools]
-    Tools --> Agent
-    Agent -->|no tool calls or loop budget reached| Verify[Verification]
-    Verify --> Report[Structured Report]
-    Report --> END
+```text
+http://127.0.0.1:8000/health
 ```
 
-The graph state tracks messages, ticker, research question, sources, calculated metrics, tool results, verification status, unsupported claims, iteration count, and the final report.
+## Run The Frontend
 
-The verification node checks that numbers in the final response appear in tool results, extracts SEC source URLs, and records deterministic calculation outputs. It flags unsupported claims instead of silently rewriting model-generated analysis.
-
-## Phase 4
-
-Phase 4 adds PostgreSQL-oriented storage and a filing RAG foundation.
-
-Storage tables:
-
-- `companies`
-- `research_jobs`
-- `reports`
-- `financial_metrics`
-- `source_metadata`
-- `filing_chunks`
-
-The RAG pipeline parses SEC filing text into section-aware chunks, preserving metadata for ticker, CIK, accession number, filing type, filing date, fiscal period, section, and source URL. Embedding generation and vector storage are dependency-injected so local tests can use deterministic embeddings while production can later use a managed embedding model and PostgreSQL/pgvector or another vector store.
-
-Example internal flow:
-
-```mermaid
-flowchart TD
-    Filing[10-K / 10-Q Text] --> Parse[Parse SEC Sections]
-    Parse --> Chunk[Section-aware Chunks]
-    Chunk --> Embed[Embedding Provider]
-    Embed --> Store[Vector Store]
-    Query[Question] --> Retrieve[Metadata-filtered Retrieval]
-    Store --> Retrieve
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-## Phase 5
+Open:
 
-Phase 5 adds the API and frontend application.
+```text
+http://127.0.0.1:5173
+```
 
-FastAPI endpoints:
+The Vite app proxies API calls to `http://127.0.0.1:8000`.
+
+## API
+
+Available endpoints:
 
 - `GET /health`
 - `POST /research`
@@ -110,7 +168,7 @@ FastAPI endpoints:
 - `POST /chat`
 - `GET /threads/{thread_id}`
 
-`POST /research` accepts:
+Example research request:
 
 ```json
 {
@@ -120,29 +178,166 @@ FastAPI endpoints:
 }
 ```
 
-Set `stream` to `true` to receive high-level SSE events such as `research_started`, `fetching_sec_data`, `calculating_metrics`, `verification_complete`, and `finished`. These events do not expose hidden chain-of-thought.
+Set `stream` to `true` to receive high-level SSE progress events:
 
-Run the backend:
-
-```powershell
-uv run uvicorn financial_research.api.app:app --reload --app-dir backend/src
+```text
+research_started
+fetching_sec_data
+fetching_market_data
+calculating_metrics
+generating_analysis
+verification_complete
+finished
 ```
 
-Run the frontend:
+These events expose execution status only, not hidden model reasoning.
 
-```powershell
-cd frontend
-npm install
-npm run dev
+## Data Sources
+
+SEC EDGAR:
+
+- company ticker to CIK lookup
+- company submissions
+- recent filings
+- latest 10-K
+- latest 10-Q
+- company facts / XBRL JSON
+
+FRED:
+
+- federal funds rate
+- 10-year Treasury yield
+- CPI
+- unemployment rate
+- GDP
+
+Market data:
+
+- quote
+- price history
+- company overview
+
+The initial market-data implementation uses Alpha Vantage behind a provider protocol so it can be replaced later.
+
+## Financial Calculations
+
+Calculations live in `financial_research.calculations` and do not use the LLM.
+
+Implemented formulas include:
+
+- year-over-year revenue growth
+- CAGR
+- gross margin
+- operating margin
+- net margin
+- free cash flow
+- debt-to-equity
+- ROIC
+- P/E
+- price-to-sales
+- EV/EBITDA
+- DCF helper functions
+
+## Agent And Graph
+
+The app uses one research agent, not a multi-agent system. The agent can call tools for SEC data, market data, macro data, and deterministic calculations.
+
+LangGraph controls the workflow:
+
+```text
+Understand Question
+Research Agent
+Tools, when requested
+Research Agent
+Verification
+Structured Report
 ```
 
-The Vite app proxies API requests to `http://127.0.0.1:8000`. The analyst workspace includes ticker input, research question input, loading/status state, report tabs, metric cards, and source citations.
+The graph has a bounded tool loop to prevent runaway execution.
 
-Production-oriented pieces added in this phase:
+## Verification
 
-- request IDs
-- structured request logging
-- provider/application error normalization
-- ticker input validation
-- high-level streaming progress events
-- thread/job in-memory coordination for local MVP workflows
+The verification node checks whether numbers in the final model response appear in tool results. It also extracts source URLs and deterministic calculation outputs from tool messages.
+
+Unsupported numeric claims are flagged instead of silently accepted.
+
+Reports distinguish:
+
+- reported facts
+- calculated metrics
+- LLM interpretation
+- sources
+
+## Filing RAG
+
+The filing RAG foundation parses 10-K and 10-Q text into section-aware chunks. Metadata includes:
+
+- ticker
+- CIK
+- accession number
+- filing type
+- filing date
+- fiscal period
+- section
+- source URL
+
+Embedding generation and vector storage are injected behind interfaces. Tests use deterministic local embeddings and an in-memory vector store. Production can later swap in managed embeddings and PostgreSQL/pgvector or another vector database.
+
+## Storage
+
+SQLAlchemy models are PostgreSQL-oriented and cover:
+
+- companies
+- research jobs
+- reports
+- financial metrics
+- source metadata
+- filing chunks
+
+The current API uses an in-memory job store for the local MVP workflow. The SQLAlchemy repositories are ready for persistence integration.
+
+## Frontend
+
+The React workspace includes:
+
+- ticker input
+- research question input
+- run state and progress indicators
+- metric cards
+- report tabs
+- source citation list
+- job polling against the FastAPI backend
+
+It is an analyst workspace, not a marketing landing page.
+
+## Testing
+
+Run:
+
+```powershell
+uv run pytest -v
+```
+
+Normal tests mock external API calls and do not require paid APIs.
+
+The suite covers:
+
+- financial calculations
+- SEC parsing and failures
+- FRED parsing and failures
+- market-data parsing and failures
+- LangChain tool wrappers
+- research prompt and structured output setup
+- LangGraph routing and verification
+- storage repositories
+- filing RAG chunking and retrieval
+- FastAPI routes
+
+## Known Limitations
+
+- Live research requires valid provider keys.
+- The API job store is currently in-memory.
+- Filing RAG indexing is implemented as a foundation but is not yet exposed through a user-facing API workflow.
+- PostgreSQL models and repositories exist, but API persistence is not fully wired into every endpoint.
+- The verifier is conservative and numeric-string based; deeper claim verification can be expanded.
+- This system is research support, not guaranteed investment advice.
