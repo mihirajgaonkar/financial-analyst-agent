@@ -17,6 +17,13 @@ from financial_research.schemas.reports import ResearchReport
 from financial_research.tools import create_research_tools
 
 MAX_TOOL_ITERATIONS = 3
+FINAL_SYNTHESIS_PROMPT = """Write the final research response now.
+
+Use only information already returned by tools in this conversation.
+Do not request additional tools.
+Distinguish reported facts, calculated metrics, interpretation, limitations, and sources.
+If a required figure is missing, say exactly what is missing instead of inventing it.
+"""
 
 
 def understand_question(state: ResearchGraphState) -> dict[str, Any]:
@@ -45,13 +52,28 @@ def create_research_agent_node(llm: Any, tools: Sequence[Any]):
     return research_agent
 
 
-def should_continue(state: ResearchGraphState) -> Literal["tools", "verification"]:
+def create_final_synthesis_node(llm: Any):
+    def final_synthesis(state: ResearchGraphState) -> dict[str, Any]:
+        messages = [
+            SystemMessage(content=RESEARCH_SYSTEM_PROMPT),
+            *state.get("messages", []),
+            HumanMessage(content=FINAL_SYNTHESIS_PROMPT),
+        ]
+        response = llm.invoke(messages)
+        return {"messages": [response]}
+
+    return final_synthesis
+
+
+def should_continue(state: ResearchGraphState) -> Literal["tools", "final_synthesis", "verification"]:
     messages = state.get("messages", [])
     if state.get("iterations", 0) >= MAX_TOOL_ITERATIONS:
+        if messages and getattr(messages[-1], "tool_calls", None):
+            return "final_synthesis"
         return "verification"
     if messages and getattr(messages[-1], "tool_calls", None):
         return "tools"
-    return "verification"
+    return "final_synthesis"
 
 
 def verification_node(state: ResearchGraphState) -> dict[str, Any]:
@@ -91,6 +113,7 @@ def create_research_graph(llm: Any | None = None, tools: Sequence[Any] | None = 
     builder.add_node("understand_question", understand_question)
     builder.add_node("research_agent", create_research_agent_node(model, selected_tools))
     builder.add_node("tools", ToolNode(selected_tools))
+    builder.add_node("final_synthesis", create_final_synthesis_node(model))
     builder.add_node("verification", verification_node)
     builder.add_node("report", report_node)
 
@@ -99,9 +122,10 @@ def create_research_graph(llm: Any | None = None, tools: Sequence[Any] | None = 
     builder.add_conditional_edges(
         "research_agent",
         should_continue,
-        {"tools": "tools", "verification": "verification"},
+        {"tools": "tools", "final_synthesis": "final_synthesis", "verification": "verification"},
     )
     builder.add_edge("tools", "research_agent")
+    builder.add_edge("final_synthesis", "verification")
     builder.add_edge("verification", "report")
     builder.add_edge("report", END)
 

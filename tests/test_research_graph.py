@@ -1,6 +1,8 @@
 from langchain_core.messages import AIMessage, ToolMessage
 
 from financial_research.graph.research_graph import (
+    MAX_TOOL_ITERATIONS,
+    create_final_synthesis_node,
     create_research_agent_node,
     create_research_graph,
     should_continue,
@@ -16,6 +18,19 @@ class FinalAnswerModel:
 
     def invoke(self, messages):
         return AIMessage(content="Reported revenue was 100 and calculated growth was 0.2.")
+
+
+class ToolCallThenFinalModel:
+    def bind_tools(self, tools):
+        return self
+
+    def invoke(self, messages):
+        if "Write the final research response now" in messages[-1].content:
+            return AIMessage(content="Reported revenue was 100 based on tool results.")
+        return AIMessage(
+            content="",
+            tool_calls=[{"name": "fake_tool", "args": {}, "id": "call-1"}],
+        )
 
 
 def test_understand_question_normalizes_input() -> None:
@@ -38,7 +53,11 @@ def test_should_continue_routes_to_verification_when_bounded() -> None:
         content="",
         tool_calls=[{"name": "calculate_revenue_growth", "args": {"current_revenue": 120, "prior_revenue": 100}, "id": "1"}],
     )
-    assert should_continue({"messages": [message], "iterations": 6}) == "verification"
+    assert should_continue({"messages": [message], "iterations": MAX_TOOL_ITERATIONS}) == "final_synthesis"
+
+
+def test_should_continue_routes_to_final_synthesis_after_plain_agent_answer() -> None:
+    assert should_continue({"messages": [AIMessage(content="hello")], "iterations": 1}) == "final_synthesis"
 
 
 def test_verifier_flags_numbers_not_in_tool_results() -> None:
@@ -81,4 +100,10 @@ def test_research_agent_node_invokes_bound_model() -> None:
     node = create_research_agent_node(FinalAnswerModel(), [])
     result = node({"messages": [], "iterations": 0})
     assert result["iterations"] == 1
+    assert result["messages"][0].content.startswith("Reported revenue")
+
+
+def test_final_synthesis_node_forces_narrative_response() -> None:
+    node = create_final_synthesis_node(ToolCallThenFinalModel())
+    result = node({"messages": [AIMessage(content="", tool_calls=[{"name": "fake_tool", "args": {}, "id": "call-1"}])]})
     assert result["messages"][0].content.startswith("Reported revenue")
