@@ -6,11 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/health": "http://127.0.0.1:8000",
-      "/research": "http://127.0.0.1:8000",
-      "/companies": "http://127.0.0.1:8000",
-      "/chat": "http://127.0.0.1:8000",
-      "/threads": "http://127.0.0.1:8000"
+      "/health": "http://127.0.0.1:8001",
+      "/research": "http://127.0.0.1:8001",
+      "/companies": "http://127.0.0.1:8001",
+      "/chat": "http://127.0.0.1:8001",
+      "/threads": "http://127.0.0.1:8001"
     }
   }
 });

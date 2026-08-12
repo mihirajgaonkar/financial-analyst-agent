@@ -14,6 +14,14 @@ def get_llm(settings: Settings | None = None):
         from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(api_key=settings.openai_api_key, model=settings.openai_model)
+    if provider == "openrouter":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+            base_url=settings.openrouter_base_url,
+        )
     if provider == "ollama":
         from langchain_ollama import ChatOllama
 

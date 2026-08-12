@@ -16,7 +16,7 @@ from financial_research.llm.model import get_llm
 from financial_research.schemas.reports import ResearchReport
 from financial_research.tools import create_research_tools
 
-MAX_TOOL_ITERATIONS = 6
+MAX_TOOL_ITERATIONS = 3
 
 
 def understand_question(state: ResearchGraphState) -> dict[str, Any]:

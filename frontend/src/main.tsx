@@ -63,26 +63,41 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker, question })
       });
+      if (!response.ok) {
+        throw new Error(`Research request failed with status ${response.status}`);
+      }
       const created: Job = await response.json();
       setJob(created);
       setEvents((current) => [...current, "job_created"]);
       await pollJob(created.job_id);
     } catch (error) {
       setEvents((current) => [...current, "failed"]);
+      setJob({
+        job_id: "local-error",
+        ticker,
+        question,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Research request failed."
+      });
     } finally {
       setLoading(false);
     }
   }
 
   async function pollJob(jobId: string) {
-    for (let attempt = 0; attempt < 30; attempt += 1) {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
       const response = await fetch(`/research/${jobId}`);
+      if (!response.ok) {
+        throw new Error(`Job lookup failed with status ${response.status}`);
+      }
       const current: Job = await response.json();
       setJob(current);
       setEvents((existing) => [...new Set([...existing, current.status])]);
       if (current.status === "complete" || current.status === "failed") return;
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
+    setEvents((existing) => [...new Set([...existing, "timeout"])]);
+    setJob((current) => current ? { ...current, status: "failed", error: "Polling timed out before the backend job completed." } : current);
   }
 
   return (
@@ -114,12 +129,13 @@ function App() {
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} />
           </label>
           <div className="progress">
-            {["research_started", "job_created", "running", "complete"].map((event) => (
+            {["research_started", "job_created", "running", "complete", "failed"].map((event) => (
               <div className={events.includes(event) ? "step active" : "step"} key={event}>
                 <ShieldCheck size={16} />
                 <span>{event.replaceAll("_", " ")}</span>
               </div>
             ))}
+            {job?.error ? <p className="error">{job.error}</p> : null}
           </div>
         </aside>
 
@@ -175,6 +191,9 @@ function tabIcon(tab: string) {
 }
 
 function renderTab(tab: string, job: Job | null) {
+  if (job?.status === "failed") {
+    return <p className="error">{job.error || "Research failed. Check the backend logs for provider details."}</p>;
+  }
   const report = job?.report;
   if (!report) {
     return <p className="empty">Run research to populate verified facts, calculated metrics, interpretation, and citations.</p>;

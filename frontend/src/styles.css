@@ -58,6 +58,16 @@ h1 {
   color: #60716a;
 }
 
+.error {
+  background: #fff1ee;
+  border: 1px solid #f1b8ad;
+  border-radius: 6px;
+  color: #9d2f1c;
+  line-height: 1.5;
+  margin: 0;
+  padding: 10px 12px;
+}
+
 .runbar {
   align-items: end;
   display: flex;
