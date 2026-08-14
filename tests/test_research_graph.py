@@ -10,6 +10,7 @@ from financial_research.graph.research_graph import (
     verification_node,
 )
 from financial_research.graph.verification import verify_final_message
+from financial_research.graph.verification import build_report, extract_calculated_metrics
 
 
 class FinalAnswerModel:
@@ -107,3 +108,54 @@ def test_final_synthesis_node_forces_narrative_response() -> None:
     node = create_final_synthesis_node(ToolCallThenFinalModel())
     result = node({"messages": [AIMessage(content="", tool_calls=[{"name": "fake_tool", "args": {}, "id": "call-1"}])]})
     assert result["messages"][0].content.startswith("Reported revenue")
+
+
+def test_build_report_maps_tool_payloads_to_sections_and_kpis() -> None:
+    report = build_report(
+        {
+            "ticker": "MSFT",
+            "tool_results": [
+                {"name": "get_company_profile", "content": {"company_name": "Microsoft Corporation"}},
+                {"name": "get_stock_price", "content": {"price": 100}},
+                {"name": "get_company_facts", "content": {
+                    "facts": {"revenue": 125, "operating_income": 25, "eps": 5},
+                    "historical_facts": {"revenue": [
+                        {"value": 125, "end": "2025-09-30"}, {"value": 100, "end": "2024-09-30"}
+                    ]},
+                    "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000789019.json",
+                }},
+                {"name": "get_latest_10k", "content": {"form": "10-K", "url": "https://www.sec.gov/Archives/edgar/data/1/filing.htm"}},
+            ],
+            "calculated_metrics": extract_calculated_metrics(
+                [
+                    {"name": "calculate_revenue_growth", "content": {"revenue_growth": 0.178}},
+                    {"name": "calculate_revenue_growth", "content": {"revenue_growth": 0.149}},
+                    {"name": "calculate_margins", "content": {"gross_margin": 0.679}},
+                ]
+            ),
+        },
+        "Verified research summary.",
+    )
+    assert report.company_name == "Microsoft Corporation"
+    assert {metric.name for metric in report.calculated_metrics} >= {"price", "revenue_growth", "operating_margin", "pe_ratio"}
+    assert report.growth_analysis and report.profitability_analysis
+    assert report.filings[0].title == "10-K"
+    assert any("data.sec.gov" in (source.url or "") for source in report.sources)
+
+
+def test_build_report_formats_growth_and_deduplicates_summary_metrics() -> None:
+    tool_results = [
+        {"name": "calculate_revenue_growth", "content": {"revenue_growth": 0.178}},
+        {"name": "calculate_revenue_growth", "content": {"revenue_growth": 0.149}},
+        {"name": "calculate_margins", "content": {"gross_margin": 0.679}},
+    ]
+    report = build_report(
+        {
+            "ticker": "MSFT",
+            "tool_results": tool_results,
+            "calculated_metrics": extract_calculated_metrics(tool_results),
+        },
+        "SEC-only research.",
+    )
+    assert report.growth_analysis == "Growth: 17.8% (reported period). Source: calculate_revenue_growth."
+    assert [metric.name for metric in report.key_financials] == ["revenue_growth", "gross_margin"]

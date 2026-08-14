@@ -30,6 +30,8 @@ type Report = {
   risks: string[];
   llm_interpretation?: string | null;
   sources: Source[];
+  filings?: Source[];
+  macro_indicators?: { series_id: string; name: string; value: number; date: string; units?: string | null }[];
 };
 
 type Job = {
@@ -51,7 +53,10 @@ function App() {
   const [events, setEvents] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const metrics = useMemo(() => job?.report?.key_financials?.length ? job.report.key_financials : job?.report?.calculated_metrics ?? [], [job]);
+  const metrics = useMemo(() => {
+    const source = job?.report?.key_financials?.length ? job.report.key_financials : job?.report?.calculated_metrics ?? [];
+    return Array.from(new Map(source.map((metric) => [metric.name, metric])).values());
+  }, [job]);
 
   async function runResearch() {
     setLoading(true);
@@ -202,18 +207,29 @@ function renderTab(tab: string, job: Job | null) {
     return <SourceList sources={report.sources} />;
   }
   if (tab === "Fundamentals") {
-    return <TextBlock title="Fundamentals" text={report.growth_analysis || report.profitability_analysis || report.executive_summary} />;
+    return (
+      <AnalysisBlock
+        title="Fundamentals"
+        texts={[report.growth_analysis, report.profitability_analysis].filter((text): text is string => Boolean(text))}
+        fallback={report.executive_summary}
+      />
+    );
   }
   if (tab === "Valuation") {
     return <TextBlock title="Valuation" text={report.valuation_analysis || report.executive_summary} />;
   }
   if (tab === "Filings") {
-    return <SourceList sources={report.sources.filter((source) => source.source_type.toLowerCase().includes("sec"))} />;
+    return <SourceList sources={report.filings?.length ? report.filings : report.sources.filter((source) => source.source_type.toLowerCase().includes("sec"))} />;
   }
   if (tab === "Macro") {
-    return <TextBlock title="Macro" text="Macro context is available through FRED-backed tools when requested by the research question." />;
+    return <MacroList indicators={report.macro_indicators ?? []} />;
   }
   return <TextBlock title={`${report.ticker} Research`} text={report.executive_summary || report.llm_interpretation || "No summary returned."} />;
+}
+
+function MacroList({ indicators }: { indicators: NonNullable<Report["macro_indicators"]> }) {
+  if (!indicators.length) return <p className="empty">No macro indicators were requested or returned.</p>;
+  return <><h2>Macro Indicators</h2><ul className="sources">{indicators.map((indicator) => <li key={`${indicator.series_id}-${indicator.date}`}><span>{indicator.series_id}</span><strong>{indicator.name}: {indicator.value}</strong><small>{indicator.date}</small></li>)}</ul></>;
 }
 
 function TextBlock({ title, text }: { title: string; text?: string | null }) {
@@ -221,6 +237,16 @@ function TextBlock({ title, text }: { title: string; text?: string | null }) {
     <>
       <h2>{title}</h2>
       <p>{text || "No verified analysis returned for this section."}</p>
+    </>
+  );
+}
+
+function AnalysisBlock({ title, texts, fallback }: { title: string; texts: string[]; fallback?: string | null }) {
+  const sections = texts.length ? texts : [fallback || "No verified analysis returned for this section."];
+  return (
+    <>
+      <h2>{title}</h2>
+      {sections.map((text) => <p key={text}>{text}</p>)}
     </>
   );
 }

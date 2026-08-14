@@ -125,9 +125,21 @@ Optional provider keys:
 ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 FRED_API_KEY=your_fred_key
 OPENAI_API_KEY=your_openai_api_key
+GOOGLE_API_KEY=your_google_ai_studio_key
+GOOGLE_MODEL=gemini-3.6-flash
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1
 ```
+
+To use a Google AI Studio key, set the provider to Google:
+
+```env
+LLM_PROVIDER=google
+GOOGLE_API_KEY=your_google_ai_studio_key
+GOOGLE_MODEL=gemini-3.6-flash
+```
+
+`LLM_PROVIDER=gemini` is also accepted as an alias.
 
 ## Run The Backend
 

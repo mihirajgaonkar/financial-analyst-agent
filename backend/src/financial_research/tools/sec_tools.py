@@ -2,7 +2,7 @@ from typing import Any
 
 from langchain.tools import tool
 
-from financial_research.services.sec import SECService, parse_company_facts_metrics
+from financial_research.services.sec import parse_company_facts_history, parse_company_facts_metrics, SECService
 
 
 def create_sec_tools(sec_service: SECService | None = None) -> list:
@@ -42,6 +42,12 @@ def create_sec_tools(sec_service: SECService | None = None) -> list:
         """Fetch SEC company facts and return a compact snapshot of common reported GAAP values."""
         cik = service.get_company_cik(ticker)
         facts = service.get_company_facts(cik)
-        return {"ticker": ticker.upper(), "cik": cik, "facts": parse_company_facts_metrics(ticker, facts)}
+        return {
+            "ticker": ticker.upper(),
+            "cik": cik,
+            "facts": parse_company_facts_metrics(ticker, facts),
+            "historical_facts": parse_company_facts_history(facts),
+            "source_url": f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
+        }
 
     return [get_company_profile, get_latest_10k, get_latest_10q, get_company_facts]

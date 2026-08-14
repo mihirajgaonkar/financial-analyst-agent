@@ -22,6 +22,13 @@ def get_llm(settings: Settings | None = None):
             model=settings.openrouter_model,
             base_url=settings.openrouter_base_url,
         )
+    if provider in {"google", "gemini"}:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            google_api_key=settings.google_api_key,
+            model=settings.google_model,
+        )
     if provider == "ollama":
         from langchain_ollama import ChatOllama
 

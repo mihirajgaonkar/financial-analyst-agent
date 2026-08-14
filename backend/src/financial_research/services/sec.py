@@ -89,6 +89,9 @@ def parse_company_facts_metrics(ticker: str, facts: dict[str, Any]) -> dict[str,
     concepts = {
         "revenue": ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues"],
         "net_income": ["NetIncomeLoss"],
+        "gross_profit": ["GrossProfit"],
+        "operating_income": ["OperatingIncomeLoss"],
+        "eps": ["EarningsPerShareDiluted", "EarningsPerShareBasic"],
         "assets": ["Assets"],
         "liabilities": ["Liabilities"],
         "equity": ["StockholdersEquity"],
@@ -99,12 +102,43 @@ def parse_company_facts_metrics(ticker: str, facts: dict[str, Any]) -> dict[str,
             concept = us_gaap.get(concept_name)
             if not concept:
                 continue
-            unit_values = concept.get("units", {}).get("USD", [])
+            unit_name = "USD" if output_name != "eps" else "USD/shares"
+            unit_values = concept.get("units", {}).get(unit_name, [])
             latest = _latest_numeric_fact(unit_values)
             if latest is not None:
                 parsed[output_name] = latest
                 break
     return parsed
+
+
+def parse_company_facts_history(facts: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Return annual SEC facts needed for deterministic period-over-period metrics."""
+    us_gaap = facts.get("facts", {}).get("us-gaap", {})
+    concepts = {
+        "revenue": ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues"],
+        "gross_profit": ["GrossProfit"],
+        "operating_income": ["OperatingIncomeLoss"],
+        "net_income": ["NetIncomeLoss"],
+        "eps": ["EarningsPerShareDiluted", "EarningsPerShareBasic"],
+    }
+    history: dict[str, list[dict[str, Any]]] = {}
+    for output_name, concept_names in concepts.items():
+        for concept_name in concept_names:
+            concept = us_gaap.get(concept_name)
+            if not concept:
+                continue
+            unit_name = "USD" if output_name != "eps" else "USD/shares"
+            values = concept.get("units", {}).get(unit_name, [])
+            annual = [
+                {"value": float(item["val"]), "end": item["end"], "period": item.get("fp")}
+                for item in values
+                if "val" in item and item.get("end") and item.get("form") == "10-K"
+            ]
+            unique = {item["end"]: item for item in annual}
+            if unique:
+                history[output_name] = sorted(unique.values(), key=lambda item: item["end"], reverse=True)
+                break
+    return history
 
 
 def build_filing_url(cik: str, accession_number: str, primary_document: str | None) -> str | None:

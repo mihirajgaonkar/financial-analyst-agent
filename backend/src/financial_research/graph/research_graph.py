@@ -10,6 +10,7 @@ from financial_research.graph.verification import (
     collect_tool_results,
     extract_calculated_metrics,
     extract_sources,
+    build_report,
     verify_final_message,
 )
 from financial_research.llm.model import get_llm
@@ -92,16 +93,7 @@ def verification_node(state: ResearchGraphState) -> dict[str, Any]:
 
 def report_node(state: ResearchGraphState) -> dict[str, Any]:
     final_text = _last_ai_message_text(state.get("messages", []))
-    report = ResearchReport(
-        ticker=state["ticker"],
-        company_name=state.get("ticker", ""),
-        executive_summary=final_text,
-        reported_facts=[],
-        calculated_metrics=state.get("calculated_metrics", []),
-        key_financials=state.get("calculated_metrics", []),
-        llm_interpretation=final_text,
-        sources=state.get("sources", []),
-    )
+    report = build_report(state, final_text)
     return {"final_report": report}
 
 

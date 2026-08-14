@@ -11,7 +11,7 @@ def create_market_tools(provider: MarketDataProvider | None = None) -> list:
     @tool
     def get_stock_price(ticker: str) -> dict[str, Any]:
         """Fetch the latest stock quote for a public company ticker."""
-        return market.get_quote(ticker).model_dump(mode="json")
+        return {**market.get_quote(ticker).model_dump(mode="json"), "source": "Market data provider"}
 
     @tool
     def get_price_history(ticker: str) -> list[dict[str, Any]]:
@@ -21,6 +21,6 @@ def create_market_tools(provider: MarketDataProvider | None = None) -> list:
     @tool
     def get_company_overview(ticker: str) -> dict[str, Any]:
         """Fetch market-data provider company overview information for a ticker."""
-        return market.get_company_overview(ticker).model_dump(mode="json")
+        return {**market.get_company_overview(ticker).model_dump(mode="json"), "source": "Market data provider"}
 
     return [get_stock_price, get_price_history, get_company_overview]

@@ -32,6 +32,8 @@ class ResearchReport(BaseModel):
     growth_analysis: str | None = None
     profitability_analysis: str | None = None
     valuation_analysis: str | None = None
+    macro_indicators: list[MacroIndicator] = Field(default_factory=list)
+    filings: list[ResearchSource] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     llm_interpretation: str | None = None
     sources: list[ResearchSource] = Field(default_factory=list)

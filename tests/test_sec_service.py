@@ -6,6 +6,7 @@ from financial_research.services.exceptions import ExternalServiceError, Invalid
 from financial_research.services.sec import (
     SECService,
     parse_company_facts_metrics,
+    parse_company_facts_history,
     parse_recent_filings,
 )
 
@@ -61,3 +62,14 @@ def test_sec_http_failure() -> None:
     service = SECService(settings=Settings(), client=httpx.Client(transport=httpx.MockTransport(handler)))
     with pytest.raises(ExternalServiceError):
         service.get_company_submissions("0000320193")
+
+
+def test_company_facts_history_returns_annual_periods() -> None:
+    facts = {
+        "facts": {"us-gaap": {"Revenues": {"units": {"USD": [
+            {"end": "2024-09-30", "val": 100, "form": "10-K", "fp": "FY"},
+            {"end": "2025-09-30", "val": 125, "form": "10-K", "fp": "FY"},
+            {"end": "2026-03-31", "val": 40, "form": "10-Q", "fp": "Q3"},
+        ]}}}}
+    }
+    assert [item["value"] for item in parse_company_facts_history(facts)["revenue"]] == [125.0, 100.0]

@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
     openrouter_model: str = "nvidia/nemotron-3-super"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    google_api_key: str | None = None
+    google_model: str = "gemini-3.6-flash"
     ollama_model: str = "llama3.1"
     ollama_base_url: str = "http://localhost:11434"
 
