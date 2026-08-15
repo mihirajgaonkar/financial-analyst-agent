@@ -37,7 +37,7 @@ flowchart TD
     Agent --> Verify[Verification Node]
     Verify --> Report[Structured Research Report]
 
-    Report -. optional persistence .-> Storage[(PostgreSQL-ready Storage)]
+    Report -. best-effort persistence .-> Storage[(PostgreSQL-ready Storage)]
     Storage --> Companies[Companies]
     Storage --> ResearchJobs[Research Jobs]
     Storage --> Reports[Reports]
@@ -62,7 +62,7 @@ flowchart TD
 - Exposes data and calculations to a single LangChain tool-calling research agent.
 - Uses LangGraph to orchestrate the research loop, tool execution, verification, and final report creation.
 - Verifies that numbers cited by the agent exist in tool results.
-- Defines SQLAlchemy models and repositories for companies, research jobs, reports, financial metrics, source metadata, and filing chunks; the local API currently uses an in-memory job store.
+- Defines SQLAlchemy models and repositories for companies, research jobs, reports, financial metrics, source metadata, graph traces, raw provider responses, and filing chunks; completed research runs are persisted when a database is available.
 - Parses SEC filing text into section-aware RAG chunks.
 - Writes local Markdown and raw JSON debug artifacts for completed research runs.
 - Serves a FastAPI backend and a React/Vite analyst interface.
@@ -322,9 +322,11 @@ SQLAlchemy models are PostgreSQL-oriented and cover:
 - reports
 - financial metrics
 - source metadata
+- graph traces
+- raw provider responses
 - filing chunks
 
-The current API uses an in-memory job store for the local MVP workflow. The SQLAlchemy repositories are ready for persistence integration.
+The current API still uses an in-memory job store for polling active local jobs. Completed research runs are also saved through SQLAlchemy on a best-effort basis when `DATABASE_URL` points to an available database.
 
 ## Frontend
 
@@ -368,9 +370,9 @@ The suite covers:
 ## Known Limitations
 
 - Live research requires valid provider keys.
-- The API job store is currently in-memory.
+- The API polling job store is currently in-memory.
 - Filing RAG indexing is implemented as a foundation but is not yet exposed through a user-facing API workflow.
-- PostgreSQL models and repositories exist, but API persistence is not fully wired into every endpoint.
+- Completed research runs are persisted on a best-effort basis; database errors are logged without failing the API response.
 - Debug reports are local diagnostic artifacts, not durable application persistence; they are excluded from Git.
 - Alpha Vantage free-tier rate and daily request limits can affect market-data prompts.
 - The verifier is conservative and numeric-string based; deeper claim verification can be expanded.
