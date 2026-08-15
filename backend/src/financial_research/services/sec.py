@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
 
 from financial_research.config.settings import Settings, get_settings
+from financial_research.debug.recorder import record_external_response
 from financial_research.schemas.filings import SECFiling
 from financial_research.services.exceptions import ExternalServiceError, InvalidTickerError
 
@@ -57,7 +58,9 @@ class SECService:
         try:
             response = self.client.get(url, headers=self.headers)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            record_external_response("SEC", url, None, payload)
+            return payload
         except httpx.HTTPStatusError as exc:
             raise ExternalServiceError(f"SEC request failed with status {exc.response.status_code}: {url}") from exc
         except httpx.HTTPError as exc:
@@ -98,16 +101,10 @@ def parse_company_facts_metrics(ticker: str, facts: dict[str, Any]) -> dict[str,
     }
     parsed: dict[str, float] = {}
     for output_name, concept_names in concepts.items():
-        for concept_name in concept_names:
-            concept = us_gaap.get(concept_name)
-            if not concept:
-                continue
-            unit_name = "USD" if output_name != "eps" else "USD/shares"
-            unit_values = concept.get("units", {}).get(unit_name, [])
-            latest = _latest_numeric_fact(unit_values)
-            if latest is not None:
-                parsed[output_name] = latest
-                break
+        unit_name = "USD" if output_name != "eps" else "USD/shares"
+        latest = _latest_numeric_concept_fact(us_gaap, concept_names, unit_name)
+        if latest is not None:
+            parsed[output_name] = latest
     return parsed
 
 
@@ -123,21 +120,16 @@ def parse_company_facts_history(facts: dict[str, Any]) -> dict[str, list[dict[st
     }
     history: dict[str, list[dict[str, Any]]] = {}
     for output_name, concept_names in concepts.items():
-        for concept_name in concept_names:
-            concept = us_gaap.get(concept_name)
-            if not concept:
-                continue
-            unit_name = "USD" if output_name != "eps" else "USD/shares"
-            values = concept.get("units", {}).get(unit_name, [])
-            annual = [
-                {"value": float(item["val"]), "end": item["end"], "period": item.get("fp")}
-                for item in values
-                if "val" in item and item.get("end") and item.get("form") == "10-K"
-            ]
-            unique = {item["end"]: item for item in annual}
-            if unique:
-                history[output_name] = sorted(unique.values(), key=lambda item: item["end"], reverse=True)
-                break
+        unit_name = "USD" if output_name != "eps" else "USD/shares"
+        candidates = [
+            annual_history(us_gaap.get(concept_name, {}).get("units", {}).get(unit_name, []))
+            for concept_name in concept_names
+            if us_gaap.get(concept_name)
+        ]
+        candidates = [candidate for candidate in candidates if candidate]
+        if candidates:
+            compatible = [candidate for candidate in candidates if len(candidate) >= 2]
+            history[output_name] = max(compatible or candidates, key=lambda candidate: candidate[0]["end"])
     return history
 
 
@@ -155,6 +147,39 @@ def _latest_numeric_fact(values: list[dict[str, Any]]) -> float | None:
         return None
     latest = max(candidates, key=lambda value: value["end"])
     return float(latest["val"])
+
+
+def _latest_numeric_concept_fact(us_gaap: dict[str, Any], concept_names: list[str], unit_name: str) -> float | None:
+    candidates: list[dict[str, Any]] = []
+    for concept_name in concept_names:
+        concept = us_gaap.get(concept_name)
+        if concept:
+            candidates.extend(concept.get("units", {}).get(unit_name, []))
+    return _latest_numeric_fact(candidates)
+
+
+def annual_history(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    annual = [
+        {"value": float(item["val"]), "end": item["end"], "period": item.get("fp")}
+        for item in values
+        if "val" in item and item.get("end") and item.get("form") == "10-K"
+    ]
+    unique = {item["end"]: item for item in annual}
+    return sorted(unique.values(), key=lambda item: item["end"], reverse=True)
+
+
+def is_materially_stale_period(period: str, histories: dict[str, list[dict[str, Any]]], max_age_days: int = 366) -> bool:
+    """Return whether a period predates the newest comparable annual fact."""
+    try:
+        revenue_date = date.fromisoformat(period)
+        other_dates = [
+            date.fromisoformat(values[0]["end"])
+            for name, values in histories.items()
+            if name != "revenue" and values and values[0].get("end")
+        ]
+    except (TypeError, ValueError):
+        return False
+    return bool(other_dates) and max(other_dates) - revenue_date > timedelta(days=max_age_days)
 
 
 def _optional_at(data: dict[str, list[Any]], key: str, index: int) -> Any | None:

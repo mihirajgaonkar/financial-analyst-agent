@@ -2,17 +2,33 @@ from collections.abc import Iterator
 from time import sleep
 
 from financial_research.graph import run_research_graph
+from financial_research.agents.research_agent import RESEARCH_SYSTEM_PROMPT
+from financial_research.config.settings import get_settings
+from financial_research.debug.recorder import capture_external_responses
+from financial_research.debug.report_writer import write_debug_report
 from financial_research.schemas.company import CompanyInfo
 from financial_research.schemas.reports import ResearchReport
 from financial_research.services.market_data import get_market_data_provider
 from financial_research.services.sec import SECService
 
 
-def run_research(ticker: str, question: str) -> ResearchReport:
-    result = run_research_graph(ticker=ticker, research_question=question)
+def run_research(ticker: str, question: str, job_id: str | None = None) -> ResearchReport:
+    with capture_external_responses() as external_responses:
+        result = run_research_graph(ticker=ticker, research_question=question)
     report = result.get("final_report")
     if report is None:
         raise RuntimeError("Research graph did not produce a final report.")
+    settings = get_settings()
+    if settings.debug_reports_enabled:
+        write_debug_report(
+            result,
+            ticker=ticker,
+            question=question,
+            job_id=job_id,
+            output_dir=settings.debug_reports_dir,
+            system_prompt=RESEARCH_SYSTEM_PROMPT,
+            external_responses=external_responses,
+        )
     return report
 
 

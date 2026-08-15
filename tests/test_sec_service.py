@@ -73,3 +73,27 @@ def test_company_facts_history_returns_annual_periods() -> None:
         ]}}}}
     }
     assert [item["value"] for item in parse_company_facts_history(facts)["revenue"]] == [125.0, 100.0]
+
+
+def test_company_facts_selects_newest_compatible_revenue_concept() -> None:
+    facts = {
+        "facts": {
+            "us-gaap": {
+                "RevenueFromContractWithCustomerExcludingAssessedTax": {
+                    "units": {"USD": [
+                        {"end": "2022-01-30", "val": 26_914, "form": "10-K", "fp": "FY"},
+                        {"end": "2021-01-31", "val": 16_675, "form": "10-K", "fp": "FY"},
+                    ]}
+                },
+                "Revenues": {
+                    "units": {"USD": [
+                        {"end": "2026-01-25", "val": 215_000, "form": "10-K", "fp": "FY"},
+                        {"end": "2025-01-26", "val": 130_000, "form": "10-K", "fp": "FY"},
+                    ]}
+                },
+            }
+        }
+    }
+
+    assert parse_company_facts_metrics("NVDA", facts)["revenue"] == 215_000.0
+    assert parse_company_facts_history(facts)["revenue"][0]["end"] == "2026-01-25"

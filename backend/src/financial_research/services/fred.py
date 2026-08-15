@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 
 from financial_research.config.settings import Settings, get_settings
+from financial_research.debug.recorder import record_external_response
 from financial_research.schemas.reports import MacroIndicator
 from financial_research.services.exceptions import ExternalServiceError
 
@@ -50,7 +51,9 @@ class FREDService:
         try:
             response = self.client.get(url, params=params)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            record_external_response("FRED", url, params, payload)
+            return payload
         except httpx.HTTPStatusError as exc:
             raise ExternalServiceError(f"FRED request failed with status {exc.response.status_code}: {url}") from exc
         except httpx.HTTPError as exc:

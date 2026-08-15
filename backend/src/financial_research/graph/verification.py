@@ -5,6 +5,8 @@ from typing import Any
 from langchain_core.messages import AIMessage, ToolMessage
 
 from financial_research.schemas.financials import FinancialMetric
+from financial_research.llm.content import extract_text_content
+from financial_research.services.sec import is_materially_stale_period
 from financial_research.schemas.reports import MacroIndicator, ResearchReport, ResearchSource
 
 NUMBER_PATTERN = re.compile(r"(?<![A-Za-z])\$?-?\d+(?:,\d{3})*(?:\.\d+)?%?")
@@ -71,7 +73,9 @@ def build_report(state: dict[str, Any], final_text: str) -> ResearchReport:
         metrics.insert(0, _metric("price", quote["price"], "USD", "latest quote", "get_stock_price"))
     current_revenue = facts.get("revenue")
     revenue_history = history.get("revenue", [])
-    if "revenue_growth" not in metric_names and len(revenue_history) >= 2:
+    revenue_period = revenue_history[0].get("end") if revenue_history else None
+    revenue_is_stale = bool(revenue_period and is_materially_stale_period(revenue_period, history))
+    if "revenue_growth" not in metric_names and len(revenue_history) >= 2 and not revenue_is_stale:
         current, prior = revenue_history[0]["value"], revenue_history[1]["value"]
         if prior:
             metrics.append(_metric("revenue_growth", (current - prior) / prior, "%", revenue_history[0]["end"], "SEC Company Facts", calculated=True))
@@ -200,9 +204,7 @@ def _last_ai_text(messages: list[Any]) -> str:
 
 
 def _message_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    return json.dumps(content, default=str)
+    return extract_text_content(content)
 
 
 def _loads_jsonish(content: Any) -> Any:

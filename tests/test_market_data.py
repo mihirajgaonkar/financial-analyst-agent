@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from financial_research.config.settings import Settings
-from financial_research.services.exceptions import ExternalServiceError, InvalidTickerError
+from financial_research.services.exceptions import InvalidTickerError, RateLimitError
 from financial_research.services.market_data import (
     AlphaVantageProvider,
     parse_alpha_vantage_history,
@@ -38,5 +38,27 @@ def test_alpha_vantage_provider_failure_note() -> None:
         return httpx.Response(200, json={"Note": "rate limit"})
 
     provider = AlphaVantageProvider(settings=Settings(alpha_vantage_api_key="demo"), client=httpx.Client(transport=httpx.MockTransport(handler)))
-    with pytest.raises(ExternalServiceError):
+    with pytest.raises(RateLimitError):
         provider.get_quote("MSFT")
+
+
+def test_alpha_vantage_provider_detects_free_tier_limit_message() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "Information": (
+                    "Thank you for using Alpha Vantage! Please consider spreading out your free API requests more sparingly "
+                    "(1 request per second). You may subscribe to any of the premium plans at https://www.alphavantage.co/premium/ "
+                    "to lift the free key rate limit (25 requests per day), raise the per-second burst limit, and instantly "
+                    "unlock all premium endpoints"
+                )
+            },
+        )
+
+    provider = AlphaVantageProvider(settings=Settings(alpha_vantage_api_key="demo"), client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(RateLimitError) as exc_info:
+        provider.get_quote("CRM")
+
+    assert "25 requests per day" in str(exc_info.value)

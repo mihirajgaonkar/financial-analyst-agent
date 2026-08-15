@@ -13,6 +13,7 @@ LLM interprets and synthesizes the results.
 
 The system is intentionally built so model output does not become the source of financial truth. Reported facts come from data providers, calculated metrics come from Python functions, and interpretation is clearly separated.
 
+
 ## Architecture
 
 ```mermaid
@@ -36,7 +37,7 @@ flowchart TD
     Agent --> Verify[Verification Node]
     Verify --> Report[Structured Research Report]
 
-    Report --> Storage[(PostgreSQL-ready Storage)]
+    Report -. optional persistence .-> Storage[(PostgreSQL-ready Storage)]
     Storage --> Companies[Companies]
     Storage --> ResearchJobs[Research Jobs]
     Storage --> Reports[Reports]
@@ -61,8 +62,9 @@ flowchart TD
 - Exposes data and calculations to a single LangChain tool-calling research agent.
 - Uses LangGraph to orchestrate the research loop, tool execution, verification, and final report creation.
 - Verifies that numbers cited by the agent exist in tool results.
-- Stores companies, research jobs, reports, financial metrics, source metadata, and filing chunks using SQLAlchemy models.
+- Defines SQLAlchemy models and repositories for companies, research jobs, reports, financial metrics, source metadata, and filing chunks; the local API currently uses an in-memory job store.
 - Parses SEC filing text into section-aware RAG chunks.
+- Writes local Markdown and raw JSON debug artifacts for completed research runs.
 - Serves a FastAPI backend and a React/Vite analyst interface.
 
 ## Project Layout
@@ -74,7 +76,8 @@ backend/src/financial_research/
   calculations/    deterministic finance formulas
   config/          environment settings
   graph/           LangGraph state, workflow, verification
-  llm/             configurable LLM factory
+  llm/             configurable LLM factory and provider-content cleanup
+  debug/           raw provider capture and Markdown debug reports
   middleware/      request logging, errors, validation
   rag/             filing parser, chunker, embeddings, vector store
   schemas/         Pydantic data contracts
@@ -105,7 +108,7 @@ uv sync
 copy .env.example .env
 ```
 
-Edit `.env` and set at least one LLM provider. The default provider is Groq:
+Edit `.env` and set at least one LLM provider. The example configuration uses Groq:
 
 ```env
 LLM_PROVIDER=groq
@@ -141,16 +144,23 @@ GOOGLE_MODEL=gemini-3.6-flash
 
 `LLM_PROVIDER=gemini` is also accepted as an alias.
 
+Debug reports are enabled by default:
+
+```env
+DEBUG_REPORTS_ENABLED=true
+DEBUG_REPORTS_DIR=debug_reports
+```
+
 ## Run The Backend
 
 ```powershell
-uv run uvicorn financial_research.api.app:app --reload --app-dir backend/src
+uv run uvicorn financial_research.api.app:app --reload --app-dir backend/src --port 8001
 ```
 
 Health check:
 
 ```text
-http://127.0.0.1:8000/health
+http://127.0.0.1:8001/health
 ```
 
 ## Run The Frontend
@@ -161,13 +171,19 @@ npm install
 npm run dev
 ```
 
+From the repository root, the equivalent command is:
+
+```powershell
+npm --prefix frontend run dev
+```
+
 Open:
 
 ```text
 http://127.0.0.1:5173
 ```
 
-The Vite app proxies API calls to `http://127.0.0.1:8000`.
+The Vite app runs on `http://127.0.0.1:5173` and proxies API calls to `http://127.0.0.1:8001`.
 
 ## API
 
@@ -267,6 +283,8 @@ Structured Report
 
 The graph has a bounded tool loop to prevent runaway execution.
 
+Model provider content is normalized before it is stored in graph state. Rich provider metadata, such as Gemini content-part signatures, is removed while tool calls are preserved. SEC revenue history compares compatible concepts and selects the newest annual series; revenue growth is withheld when its history is materially older than other annual facts.
+
 ## Verification
 
 The verification node checks whether numbers in the final model response appear in tool results. It also extracts source URLs and deterministic calculation outputs from tool messages.
@@ -317,6 +335,7 @@ The React workspace includes:
 - run state and progress indicators
 - metric cards
 - report tabs
+- Markdown-rendered analysis in Overview, Fundamentals, and Valuation tabs
 - source citation list
 - job polling against the FastAPI backend
 
@@ -340,6 +359,7 @@ The suite covers:
 - market-data parsing and failures
 - LangChain tool wrappers
 - research prompt and structured output setup
+- provider-content cleanup and debug report generation
 - LangGraph routing and verification
 - storage repositories
 - filing RAG chunking and retrieval
@@ -351,5 +371,7 @@ The suite covers:
 - The API job store is currently in-memory.
 - Filing RAG indexing is implemented as a foundation but is not yet exposed through a user-facing API workflow.
 - PostgreSQL models and repositories exist, but API persistence is not fully wired into every endpoint.
+- Debug reports are local diagnostic artifacts, not durable application persistence; they are excluded from Git.
+- Alpha Vantage free-tier rate and daily request limits can affect market-data prompts.
 - The verifier is conservative and numeric-string based; deeper claim verification can be expanded.
 - This system is research support, not guaranteed investment advice.

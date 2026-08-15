@@ -15,3 +15,6 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 npm-debug.log*
+debug_reports/
+RESEARCH_PROCESS.md
+AI_AGENT_CONTEXT.md

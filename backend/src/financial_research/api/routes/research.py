@@ -36,7 +36,7 @@ def _run_and_store_job(job_id: str, ticker: str, question: str) -> None:
 
     def worker() -> None:
         try:
-            results.put(("complete", run_research(ticker, question)))
+            results.put(("complete", run_research(ticker, question, job_id=job_id)))
         except Exception as exc:
             results.put(("failed", str(exc)))
 

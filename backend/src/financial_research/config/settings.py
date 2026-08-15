@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     embedding_provider: str = "none"
     embedding_model: str | None = None
     research_timeout_seconds: int = 60
+    debug_reports_enabled: bool = True
+    debug_reports_dir: str = "debug_reports"
 
     llm_provider: str = "groq"
     groq_api_key: str | None = None

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Activity, BarChart3, Building2, FileText, Play, RefreshCcw, Search, ShieldCheck } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import "./styles.css";
 
 type Metric = {
@@ -236,7 +237,7 @@ function TextBlock({ title, text }: { title: string; text?: string | null }) {
   return (
     <>
       <h2>{title}</h2>
-      <p>{text || "No verified analysis returned for this section."}</p>
+      <MarkdownContent text={text || "No verified analysis returned for this section."} />
     </>
   );
 }
@@ -246,9 +247,13 @@ function AnalysisBlock({ title, texts, fallback }: { title: string; texts: strin
   return (
     <>
       <h2>{title}</h2>
-      {sections.map((text) => <p key={text}>{text}</p>)}
+      {sections.map((text) => <MarkdownContent key={text} text={text} />)}
     </>
   );
+}
+
+function MarkdownContent({ text }: { text: string }) {
+  return <div className="markdown-content"><ReactMarkdown>{text}</ReactMarkdown></div>;
 }
 
 function SourceList({ sources }: { sources: Source[] }) {

@@ -4,9 +4,10 @@ from typing import Any, Protocol
 import httpx
 
 from financial_research.config.settings import Settings, get_settings
+from financial_research.debug.recorder import record_external_response
 from financial_research.schemas.company import CompanyInfo
 from financial_research.schemas.financials import PriceData
-from financial_research.services.exceptions import ExternalServiceError, InvalidTickerError
+from financial_research.services.exceptions import ExternalServiceError, InvalidTickerError, RateLimitError
 
 
 class MarketDataProvider(Protocol):
@@ -52,6 +53,7 @@ class AlphaVantageProvider:
             response = self.client.get(self.base_url, params=params)
             response.raise_for_status()
             payload = response.json()
+            record_external_response("Alpha Vantage", self.base_url, params, payload)
         except httpx.HTTPStatusError as exc:
             raise ExternalServiceError(f"Market data request failed with status {exc.response.status_code}.") from exc
         except httpx.HTTPError as exc:
@@ -59,7 +61,10 @@ class AlphaVantageProvider:
         if "Error Message" in payload:
             raise InvalidTickerError(payload["Error Message"])
         if "Note" in payload or "Information" in payload:
-            raise ExternalServiceError(payload.get("Note") or payload.get("Information"))
+            message = payload.get("Note") or payload.get("Information") or "Market data provider rate limit reached."
+            if _is_rate_limit_message(message):
+                raise RateLimitError(_rate_limit_message(message))
+            raise ExternalServiceError(message)
         return payload
 
 
@@ -110,3 +115,18 @@ def _to_float(value: Any) -> float | None:
     if value in (None, "", "None"):
         return None
     return float(value)
+
+
+def _is_rate_limit_message(message: str) -> bool:
+    lowered = message.lower()
+    return "rate limit" in lowered or "free api requests" in lowered or "requests per day" in lowered or "requests per second" in lowered
+
+
+def _rate_limit_message(message: str) -> str:
+    if "25 requests per day" in message:
+        return (
+            "Alpha Vantage free-tier limit reached. The provider allows 25 requests per day and asks requests to be "
+            "spread out to about 1 request per second. Wait for the quota window to reset, slow request volume, or use "
+            "a premium key."
+        )
+    return f"Alpha Vantage rate limit reached: {message}"

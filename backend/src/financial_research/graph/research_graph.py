@@ -14,6 +14,8 @@ from financial_research.graph.verification import (
     verify_final_message,
 )
 from financial_research.llm.model import get_llm
+from financial_research.llm.content import extract_text_content, strip_provider_metadata
+from financial_research.llm.errors import invoke_with_quota_handling
 from financial_research.schemas.reports import ResearchReport
 from financial_research.tools import create_research_tools
 
@@ -47,7 +49,7 @@ def create_research_agent_node(llm: Any, tools: Sequence[Any]):
 
     def research_agent(state: ResearchGraphState) -> dict[str, Any]:
         messages = [SystemMessage(content=RESEARCH_SYSTEM_PROMPT), *state.get("messages", [])]
-        response = model.invoke(messages)
+        response = strip_provider_metadata(invoke_with_quota_handling(model, messages))
         return {"messages": [response], "iterations": state.get("iterations", 0) + 1}
 
     return research_agent
@@ -60,7 +62,7 @@ def create_final_synthesis_node(llm: Any):
             *state.get("messages", []),
             HumanMessage(content=FINAL_SYNTHESIS_PROMPT),
         ]
-        response = llm.invoke(messages)
+        response = strip_provider_metadata(invoke_with_quota_handling(llm, messages))
         return {"messages": [response]}
 
     return final_synthesis
@@ -132,6 +134,5 @@ def run_research_graph(ticker: str, research_question: str, llm: Any | None = No
 def _last_ai_message_text(messages: list[Any]) -> str:
     for message in reversed(messages):
         if getattr(message, "type", None) == "ai":
-            content = message.content
-            return content if isinstance(content, str) else str(content)
+            return extract_text_content(message.content)
     return ""

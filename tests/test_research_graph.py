@@ -159,3 +159,37 @@ def test_build_report_formats_growth_and_deduplicates_summary_metrics() -> None:
     )
     assert report.growth_analysis == "Growth: 17.8% (reported period). Source: calculate_revenue_growth."
     assert [metric.name for metric in report.key_financials] == ["revenue_growth", "gross_margin"]
+
+
+def test_build_report_rejects_stale_revenue_growth() -> None:
+    report = build_report(
+        {
+            "ticker": "NVDA",
+            "tool_results": [
+                {
+                    "name": "get_company_facts",
+                    "content": {
+                        "facts": {
+                            "revenue": 26_914_000_000,
+                            "operating_income": 130_387_000_000,
+                        },
+                        "historical_facts": {
+                            "revenue": [
+                                {"value": 26_914_000_000, "end": "2022-01-30"},
+                                {"value": 16_675_000_000, "end": "2021-01-31"},
+                            ],
+                            "operating_income": [
+                                {"value": 130_387_000_000, "end": "2026-01-25"},
+                                {"value": 81_453_000_000, "end": "2025-01-26"},
+                            ],
+                        },
+                    },
+                }
+            ],
+            "calculated_metrics": [],
+        },
+        "SEC facts summary.",
+    )
+
+    assert not any(metric.name == "revenue_growth" for metric in report.calculated_metrics)
+    assert report.growth_analysis == "Growth: Revenue growth could not be calculated from two annual SEC periods."

@@ -4,6 +4,7 @@ from financial_research.schemas.company import CompanyInfo
 from financial_research.schemas.filings import SECFiling
 from financial_research.schemas.financials import PriceData
 from financial_research.schemas.reports import MacroIndicator
+from financial_research.services.exceptions import RateLimitError
 from financial_research.tools.calculation_tools import calculate_revenue_growth
 from financial_research.tools.macro_tools import create_macro_tools
 from financial_research.tools.market_tools import create_market_tools
@@ -38,6 +39,11 @@ class FakeMarketProvider:
         return CompanyInfo(ticker=ticker, name="Microsoft Corporation", market_cap=300)
 
 
+class RateLimitedMarketProvider(FakeMarketProvider):
+    def get_quote(self, ticker: str) -> PriceData:
+        raise RateLimitError("Alpha Vantage free-tier limit reached.")
+
+
 class FakeFREDService:
     def get_fred_series(self, series_id: str, observation_start: str | None = None, limit: int = 1) -> list[MacroIndicator]:
         return [MacroIndicator(series_id=series_id, name=series_id, value=4.5, date=date(2026, 8, 7))]
@@ -57,6 +63,14 @@ def test_market_tools_delegate_to_provider() -> None:
     overview = tools["get_company_overview"].invoke({"ticker": "MSFT"})
     assert quote["price"] == 100
     assert overview["market_cap"] == 300
+
+
+def test_market_tool_returns_structured_rate_limit_result() -> None:
+    tools = {tool.name: tool for tool in create_market_tools(RateLimitedMarketProvider())}
+    quote = tools["get_stock_price"].invoke({"ticker": "crm"})
+    assert quote["ticker"] == "CRM"
+    assert quote["available"] is False
+    assert quote["error_type"] == "rate_limit"
 
 
 def test_macro_tools_delegate_to_service() -> None:

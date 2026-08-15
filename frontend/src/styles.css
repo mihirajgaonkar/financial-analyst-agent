@@ -213,6 +213,48 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.markdown-content {
+  color: #26332e;
+  line-height: 1.65;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  color: #17201d;
+  margin: 18px 0 8px;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-content p {
+  margin: 0 0 12px;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+
+.markdown-content li {
+  margin-bottom: 5px;
+}
+
+.markdown-content strong {
+  color: #17201d;
+}
+
+.markdown-content code {
+  background: #eef3ef;
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
 .sources {
   display: grid;
   gap: 12px;

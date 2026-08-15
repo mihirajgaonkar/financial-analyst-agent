@@ -19,7 +19,7 @@ def test_health_endpoint() -> None:
 def test_research_job_lifecycle(monkeypatch) -> None:
     from financial_research.api.routes import research as research_route
 
-    def fake_run_research(ticker: str, question: str) -> ResearchReport:
+    def fake_run_research(ticker: str, question: str, job_id: str | None = None) -> ResearchReport:
         return ResearchReport(ticker=ticker.upper(), company_name="Microsoft", executive_summary=question)
 
     monkeypatch.setattr(research_route, "run_research", fake_run_research)
