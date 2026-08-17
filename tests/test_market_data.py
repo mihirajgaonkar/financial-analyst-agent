@@ -37,7 +37,10 @@ def test_alpha_vantage_provider_failure_note() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"Note": "rate limit"})
 
-    provider = AlphaVantageProvider(settings=Settings(alpha_vantage_api_key="demo"), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    provider = AlphaVantageProvider(
+        settings=Settings(alpha_vantage_api_key="demo", provider_cache_enabled=False),
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
     with pytest.raises(RateLimitError):
         provider.get_quote("MSFT")
 
@@ -56,7 +59,10 @@ def test_alpha_vantage_provider_detects_free_tier_limit_message() -> None:
             },
         )
 
-    provider = AlphaVantageProvider(settings=Settings(alpha_vantage_api_key="demo"), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    provider = AlphaVantageProvider(
+        settings=Settings(alpha_vantage_api_key="demo", provider_cache_enabled=False),
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
 
     with pytest.raises(RateLimitError) as exc_info:
         provider.get_quote("CRM")

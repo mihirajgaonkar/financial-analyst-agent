@@ -7,6 +7,7 @@ from financial_research.config.settings import Settings, get_settings
 from financial_research.debug.recorder import record_external_response
 from financial_research.schemas.reports import MacroIndicator
 from financial_research.services.exceptions import ExternalServiceError
+from financial_research.storage.file_cache import get_cached_provider_response, store_provider_response
 
 FRED_BASE_URL = "https://api.stlouisfed.org/fred"
 DEFAULT_INDICATORS = {
@@ -48,10 +49,15 @@ class FREDService:
         return indicators
 
     def _get_json(self, url: str, params: dict[str, Any]) -> Any:
+        cached = get_cached_provider_response("FRED", url, params, ttl_seconds=self.settings.fred_cache_ttl_seconds, settings=self.settings)
+        if cached is not None:
+            record_external_response("FRED", url, {**params, "cache_status": "hit"}, cached)
+            return cached
         try:
             response = self.client.get(url, params=params)
             response.raise_for_status()
             payload = response.json()
+            store_provider_response("FRED", url, params, payload, settings=self.settings)
             record_external_response("FRED", url, params, payload)
             return payload
         except httpx.HTTPStatusError as exc:

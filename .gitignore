@@ -16,5 +16,6 @@ frontend/dist/
 frontend/.vite/
 npm-debug.log*
 debug_reports/
+/storage/
 RESEARCH_PROCESS.md
 AI_AGENT_CONTEXT.md

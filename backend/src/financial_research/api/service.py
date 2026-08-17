@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+import logging
 from time import sleep
 
 from financial_research.graph import run_research_graph
@@ -10,6 +11,10 @@ from financial_research.schemas.company import CompanyInfo
 from financial_research.schemas.reports import ResearchReport
 from financial_research.services.market_data import get_market_data_provider
 from financial_research.services.sec import SECService
+from financial_research.storage.file_archive import persist_research_run_files
+from financial_research.storage.persistence import persist_research_run
+
+logger = logging.getLogger(__name__)
 
 
 def run_research(ticker: str, question: str, job_id: str | None = None) -> ResearchReport:
@@ -29,6 +34,31 @@ def run_research(ticker: str, question: str, job_id: str | None = None) -> Resea
             system_prompt=RESEARCH_SYSTEM_PROMPT,
             external_responses=external_responses,
         )
+    file_archive_dir = None
+    try:
+        file_archive_dir = persist_research_run_files(
+            ticker=ticker,
+            question=question,
+            state=result,
+            report=report,
+            external_responses=external_responses,
+            job_id=job_id,
+            settings=settings,
+        )
+    except Exception:
+        logger.exception("Failed to write file archive for %s.", ticker.upper())
+    if settings.database_persistence_enabled:
+        try:
+            persist_research_run(
+                ticker=ticker,
+                question=question,
+                state=result,
+                report=report,
+                external_responses=external_responses,
+                file_archive_dir=file_archive_dir,
+            )
+        except Exception:
+            logger.exception("Failed to persist research run for %s.", ticker.upper())
     return report
 
 

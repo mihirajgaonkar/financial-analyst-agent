@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     research_timeout_seconds: int = 60
     debug_reports_enabled: bool = True
     debug_reports_dir: str = "debug_reports"
+    file_storage_enabled: bool = True
+    file_storage_dir: str = "storage/runs"
+    provider_cache_enabled: bool = True
+    provider_cache_dir: str = "storage/provider_cache"
+    sec_cache_ttl_seconds: int = 60 * 24 * 60 * 60
+    fred_cache_ttl_seconds: int = 6 * 60 * 60
+    alpha_vantage_cache_ttl_seconds: int = 15 * 60
+    sec_company_facts_history_limit: int = 5
+    database_persistence_enabled: bool = False
+    database_store_raw_provider_payloads: bool = False
 
     llm_provider: str = "groq"
     groq_api_key: str | None = None

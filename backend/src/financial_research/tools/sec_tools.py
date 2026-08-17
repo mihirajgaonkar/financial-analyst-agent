@@ -2,11 +2,13 @@ from typing import Any
 
 from langchain.tools import tool
 
+from financial_research.config.settings import get_settings
 from financial_research.services.sec import parse_company_facts_history, parse_company_facts_metrics, SECService
 
 
 def create_sec_tools(sec_service: SECService | None = None) -> list:
     service = sec_service or SECService()
+    settings = get_settings()
 
     @tool
     def get_company_profile(ticker: str) -> dict[str, Any]:
@@ -46,7 +48,7 @@ def create_sec_tools(sec_service: SECService | None = None) -> list:
             "ticker": ticker.upper(),
             "cik": cik,
             "facts": parse_company_facts_metrics(ticker, facts),
-            "historical_facts": parse_company_facts_history(facts),
+            "historical_facts": parse_company_facts_history(facts, limit=settings.sec_company_facts_history_limit),
             "source_url": f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json",
         }
 

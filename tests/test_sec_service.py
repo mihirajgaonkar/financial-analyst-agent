@@ -15,15 +15,33 @@ def test_ticker_to_cik_handling() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"0": {"ticker": "AAPL", "cik_str": 320193, "title": "Apple Inc."}})
 
-    service = SECService(settings=Settings(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    service = SECService(settings=Settings(provider_cache_enabled=False), client=httpx.Client(transport=httpx.MockTransport(handler)))
     assert service.get_company_cik("aapl") == "0000320193"
+
+
+def test_sec_service_reuses_cached_provider_response(tmp_path) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"name": "Apple Inc."})
+
+    service = SECService(
+        settings=Settings(provider_cache_dir=str(tmp_path), provider_cache_enabled=True),
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert service.get_company_submissions("0000320193")["name"] == "Apple Inc."
+    assert service.get_company_submissions("0000320193")["name"] == "Apple Inc."
+    assert calls == 1
 
 
 def test_invalid_ticker_raises() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={})
 
-    service = SECService(settings=Settings(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    service = SECService(settings=Settings(provider_cache_enabled=False), client=httpx.Client(transport=httpx.MockTransport(handler)))
     with pytest.raises(InvalidTickerError):
         service.get_company_cik("NOPE")
 
@@ -59,7 +77,7 @@ def test_sec_http_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"error": "server error"})
 
-    service = SECService(settings=Settings(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    service = SECService(settings=Settings(provider_cache_enabled=False), client=httpx.Client(transport=httpx.MockTransport(handler)))
     with pytest.raises(ExternalServiceError):
         service.get_company_submissions("0000320193")
 
@@ -73,6 +91,20 @@ def test_company_facts_history_returns_annual_periods() -> None:
         ]}}}}
     }
     assert [item["value"] for item in parse_company_facts_history(facts)["revenue"]] == [125.0, 100.0]
+
+
+def test_company_facts_history_limits_model_facing_periods() -> None:
+    facts = {
+        "facts": {"us-gaap": {"Revenues": {"units": {"USD": [
+            {"end": f"202{year}-12-31", "val": year, "form": "10-K", "fp": "FY"}
+            for year in range(6)
+        ]}}}}
+    }
+
+    history = parse_company_facts_history(facts, limit=3)["revenue"]
+
+    assert len(history) == 3
+    assert [item["end"] for item in history] == ["2025-12-31", "2024-12-31", "2023-12-31"]
 
 
 def test_company_facts_selects_newest_compatible_revenue_concept() -> None:

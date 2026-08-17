@@ -122,6 +122,23 @@ SEC also requires a descriptive user agent:
 SEC_USER_AGENT="Financial Research Agent your-email@example.com"
 ```
 
+## Database Migrations
+
+The application uses Alembic to version SQLAlchemy schema changes. Set `DATABASE_URL` in `.env`, then run migrations from the repository root:
+
+```powershell
+uv run alembic upgrade head
+```
+
+After changing `backend/src/financial_research/storage/models.py`, generate a migration and review it before applying it:
+
+```powershell
+uv run alembic revision --autogenerate -m "describe the schema change"
+uv run alembic upgrade head
+```
+
+Useful commands are `uv run alembic current`, `uv run alembic history`, and `uv run alembic downgrade -1`. Alembic uses the same `DATABASE_URL` setting as the application. `create_all_tables()` remains available for isolated tests, but it is not the production schema migration path.
+
 Optional provider keys:
 
 ```env
@@ -149,6 +166,16 @@ Debug reports are enabled by default:
 ```env
 DEBUG_REPORTS_ENABLED=true
 DEBUG_REPORTS_DIR=debug_reports
+FILE_STORAGE_ENABLED=true
+FILE_STORAGE_DIR=storage/runs
+PROVIDER_CACHE_ENABLED=true
+PROVIDER_CACHE_DIR=storage/provider_cache
+SEC_CACHE_TTL_SECONDS=5184000
+FRED_CACHE_TTL_SECONDS=21600
+ALPHA_VANTAGE_CACHE_TTL_SECONDS=900
+SEC_COMPANY_FACTS_HISTORY_LIMIT=5
+DATABASE_PERSISTENCE_ENABLED=false
+DATABASE_STORE_RAW_PROVIDER_PAYLOADS=false
 ```
 
 ## Run The Backend
@@ -247,6 +274,14 @@ Market data:
 
 The initial market-data implementation uses Alpha Vantage behind a provider protocol so it can be replaced later.
 
+Provider JSON responses are cached on disk by default to avoid duplicate calls:
+
+- SEC: 60 days, because filings/facts generally do not need to be refetched constantly for the same company.
+- FRED: 6 hours, because macro observations update on their own release schedules and rarely need repeated same-hour calls.
+- Alpha Vantage: 15 minutes, because quotes are more time-sensitive and free-tier limits are tight.
+
+The cache stores raw provider JSON under `storage/provider_cache/`. API keys are not written into cache keys or cache metadata.
+
 ## Financial Calculations
 
 Calculations live in `financial_research.calculations` and do not use the LLM.
@@ -315,6 +350,12 @@ Embedding generation and vector storage are injected behind interfaces. Tests us
 
 ## Storage
 
+The default local persistence is hybrid filesystem-first storage:
+
+- `debug_reports/` contains human-readable Markdown plus a single raw JSON capture for each run.
+- `storage/runs/` contains split JSON artifacts for each completed run: metadata, final report, graph trace, messages, tool results, and one file per raw provider response.
+- `storage/provider_cache/` contains reusable provider responses to avoid duplicate SEC, FRED, and Alpha Vantage calls.
+
 SQLAlchemy models are PostgreSQL-oriented and cover:
 
 - companies
@@ -326,7 +367,9 @@ SQLAlchemy models are PostgreSQL-oriented and cover:
 - raw provider responses
 - filing chunks
 
-The current API still uses an in-memory job store for polling active local jobs. Completed research runs are also saved through SQLAlchemy on a best-effort basis when `DATABASE_URL` points to an available database.
+Schema changes are tracked in `migrations/`. Apply them with Alembic before enabling database persistence in a new environment.
+
+The current API still uses an in-memory job store for polling active local jobs. Completed research runs are saved to the filesystem by default. SQLAlchemy/PostgreSQL persistence is optional and runs only when `DATABASE_PERSISTENCE_ENABLED=true` and `DATABASE_URL` points to an available database. By default, database provider-response rows store file paths instead of full raw JSON payloads; set `DATABASE_STORE_RAW_PROVIDER_PAYLOADS=true` only if you explicitly want those large payloads copied into the database.
 
 ## Frontend
 
@@ -372,8 +415,8 @@ The suite covers:
 - Live research requires valid provider keys.
 - The API polling job store is currently in-memory.
 - Filing RAG indexing is implemented as a foundation but is not yet exposed through a user-facing API workflow.
-- Completed research runs are persisted on a best-effort basis; database errors are logged without failing the API response.
-- Debug reports are local diagnostic artifacts, not durable application persistence; they are excluded from Git.
+- Completed research runs are persisted to the filesystem by default; optional database persistence is best-effort when enabled.
+- Debug reports and filesystem run archives are local diagnostic/persistence artifacts; they are excluded from Git.
 - Alpha Vantage free-tier rate and daily request limits can affect market-data prompts.
 - The verifier is conservative and numeric-string based; deeper claim verification can be expanded.
 - This system is research support, not guaranteed investment advice.

@@ -1,0 +1,7 @@
+# Alembic migrations
+
+Run migrations from the repository root with `uv run alembic upgrade head`.
+
+Create a migration after changing SQLAlchemy models with:
+
+`uv run alembic revision --autogenerate -m "describe the schema change"`

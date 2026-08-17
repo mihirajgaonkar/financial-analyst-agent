@@ -20,6 +20,6 @@ def test_fred_http_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, json={"error": "unavailable"})
 
-    service = FREDService(settings=Settings(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    service = FREDService(settings=Settings(provider_cache_enabled=False), client=httpx.Client(transport=httpx.MockTransport(handler)))
     with pytest.raises(ExternalServiceError):
         service.get_fred_series("FEDFUNDS")

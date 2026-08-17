@@ -7,6 +7,7 @@ from financial_research.config.settings import Settings, get_settings
 from financial_research.debug.recorder import record_external_response
 from financial_research.schemas.filings import SECFiling
 from financial_research.services.exceptions import ExternalServiceError, InvalidTickerError
+from financial_research.storage.file_cache import get_cached_provider_response, store_provider_response
 
 SEC_DATA_BASE = "https://data.sec.gov"
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
@@ -55,10 +56,15 @@ class SECService:
         return max(filings, key=lambda filing: filing.filing_date, default=None)
 
     def _get_json(self, url: str) -> Any:
+        cached = get_cached_provider_response("SEC", url, None, ttl_seconds=self.settings.sec_cache_ttl_seconds, settings=self.settings)
+        if cached is not None:
+            record_external_response("SEC", url, {"cache_status": "hit"}, cached)
+            return cached
         try:
             response = self.client.get(url, headers=self.headers)
             response.raise_for_status()
             payload = response.json()
+            store_provider_response("SEC", url, None, payload, settings=self.settings)
             record_external_response("SEC", url, None, payload)
             return payload
         except httpx.HTTPStatusError as exc:
@@ -108,7 +114,7 @@ def parse_company_facts_metrics(ticker: str, facts: dict[str, Any]) -> dict[str,
     return parsed
 
 
-def parse_company_facts_history(facts: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def parse_company_facts_history(facts: dict[str, Any], limit: int = 5) -> dict[str, list[dict[str, Any]]]:
     """Return annual SEC facts needed for deterministic period-over-period metrics."""
     us_gaap = facts.get("facts", {}).get("us-gaap", {})
     concepts = {
@@ -129,7 +135,8 @@ def parse_company_facts_history(facts: dict[str, Any]) -> dict[str, list[dict[st
         candidates = [candidate for candidate in candidates if candidate]
         if candidates:
             compatible = [candidate for candidate in candidates if len(candidate) >= 2]
-            history[output_name] = max(compatible or candidates, key=lambda candidate: candidate[0]["end"])
+            selected = max(compatible or candidates, key=lambda candidate: candidate[0]["end"])
+            history[output_name] = selected[:limit]
     return history
 
 

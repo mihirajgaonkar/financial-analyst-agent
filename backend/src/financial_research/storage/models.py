@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -42,6 +43,8 @@ class ResearchJob(Base):
 
     company: Mapped[Company | None] = relationship(back_populates="research_jobs")
     reports: Mapped[list["StoredResearchReport"]] = relationship(back_populates="job")
+    graph_traces: Mapped[list["StoredGraphTrace"]] = relationship(back_populates="job")
+    provider_responses: Mapped[list["StoredProviderResponse"]] = relationship(back_populates="job")
 
 
 class StoredResearchReport(Base):
@@ -54,6 +57,35 @@ class StoredResearchReport(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     job: Mapped[ResearchJob | None] = relationship(back_populates="reports")
+
+
+class StoredGraphTrace(Base):
+    __tablename__ = "graph_traces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("research_jobs.id"))
+    ticker: Mapped[str] = mapped_column(String(16), index=True)
+    state_json: Mapped[dict] = mapped_column(JSON)
+    messages_json: Mapped[list] = mapped_column(JSON, default=list)
+    tool_results_json: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    job: Mapped[ResearchJob | None] = relationship(back_populates="graph_traces")
+
+
+class StoredProviderResponse(Base):
+    __tablename__ = "provider_responses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("research_jobs.id"))
+    provider: Mapped[str] = mapped_column(String(64), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    params_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    payload_file_path: Mapped[str | None] = mapped_column(Text)
+    payload_json: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    job: Mapped[ResearchJob | None] = relationship(back_populates="provider_responses")
 
 
 class StoredFinancialMetric(Base):

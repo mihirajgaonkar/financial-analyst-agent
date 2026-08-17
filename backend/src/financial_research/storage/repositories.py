@@ -1,3 +1,7 @@
+from datetime import date, datetime
+from typing import Any
+
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,7 +13,9 @@ from financial_research.storage.models import (
     FilingChunk,
     ResearchJob,
     SourceMetadata,
+    StoredGraphTrace,
     StoredFinancialMetric,
+    StoredProviderResponse,
     StoredResearchReport,
 )
 
@@ -48,6 +54,7 @@ class ResearchJobRepository:
 
     def mark_complete(self, job: ResearchJob) -> ResearchJob:
         job.status = "complete"
+        job.completed_at = datetime.now().astimezone()
         self.session.flush()
         return job
 
@@ -61,6 +68,54 @@ class ReportRepository:
         self.session.add(stored)
         self.session.flush()
         return stored
+
+
+class GraphTraceRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save(self, ticker: str, state: dict[str, Any], job_id: int | None = None) -> StoredGraphTrace:
+        messages = state.get("messages", [])
+        tool_results = state.get("tool_results", [])
+        stored = StoredGraphTrace(
+            ticker=ticker.upper(),
+            job_id=job_id,
+            state_json=_jsonable({key: value for key, value in state.items() if key != "messages"}),
+            messages_json=_jsonable(messages),
+            tool_results_json=_jsonable(tool_results),
+        )
+        self.session.add(stored)
+        self.session.flush()
+        return stored
+
+
+class ProviderResponseRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save_many(
+        self,
+        responses: list[dict[str, Any]],
+        job_id: int | None = None,
+        *,
+        file_paths: list[str | None] | None = None,
+        store_payloads: bool = True,
+    ) -> list[StoredProviderResponse]:
+        file_paths = file_paths or [None] * len(responses)
+        stored_responses = [
+            StoredProviderResponse(
+                job_id=job_id,
+                provider=response.get("provider", "unknown"),
+                url=response.get("url", ""),
+                params_json=_jsonable(response.get("params", {})),
+                payload_file_path=file_paths[index] if index < len(file_paths) else None,
+                payload_json=_jsonable(response.get("payload")) if store_payloads else None,
+            )
+            for index, response in enumerate(responses)
+        ]
+        self.session.add_all(stored_responses)
+        self.session.flush()
+        return stored_responses
 
 
 class FinancialMetricRepository:
@@ -120,3 +175,17 @@ class FilingChunkRepository:
         if section:
             query = query.where(FilingChunk.section == section)
         return list(self.session.scalars(query.limit(limit)))
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if hasattr(value, "model_dump"):
+        return _jsonable(value.model_dump(mode="json"))
+    return value

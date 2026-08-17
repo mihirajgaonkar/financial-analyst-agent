@@ -8,6 +8,7 @@ from financial_research.debug.recorder import record_external_response
 from financial_research.schemas.company import CompanyInfo
 from financial_research.schemas.financials import PriceData
 from financial_research.services.exceptions import ExternalServiceError, InvalidTickerError, RateLimitError
+from financial_research.storage.file_cache import get_cached_provider_response, store_provider_response
 
 
 class MarketDataProvider(Protocol):
@@ -49,6 +50,16 @@ class AlphaVantageProvider:
 
     def _request(self, params: dict[str, Any]) -> dict[str, Any]:
         params = {**params, "apikey": self.settings.alpha_vantage_api_key}
+        cached = get_cached_provider_response(
+            "Alpha Vantage",
+            self.base_url,
+            params,
+            ttl_seconds=self.settings.alpha_vantage_cache_ttl_seconds,
+            settings=self.settings,
+        )
+        if cached is not None:
+            record_external_response("Alpha Vantage", self.base_url, {**params, "cache_status": "hit"}, cached)
+            return cached
         try:
             response = self.client.get(self.base_url, params=params)
             response.raise_for_status()
@@ -65,6 +76,7 @@ class AlphaVantageProvider:
             if _is_rate_limit_message(message):
                 raise RateLimitError(_rate_limit_message(message))
             raise ExternalServiceError(message)
+        store_provider_response("Alpha Vantage", self.base_url, params, payload, settings=self.settings)
         return payload
 
 

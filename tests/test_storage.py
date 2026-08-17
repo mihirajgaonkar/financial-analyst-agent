@@ -9,6 +9,8 @@ from financial_research.storage.repositories import (
     CompanyRepository,
     FilingChunkRepository,
     FinancialMetricRepository,
+    GraphTraceRepository,
+    ProviderResponseRepository,
     ReportRepository,
     ResearchJobRepository,
     SourceRepository,
@@ -62,3 +64,36 @@ def test_metric_source_and_filing_chunk_storage() -> None:
     assert stored_sources[0].title == "10-K"
     assert chunks[0].embedding == [0.1, 0.2]
     assert found_chunks[0].text == "Risk factor text"
+
+
+def test_graph_trace_and_provider_response_storage() -> None:
+    session = make_session()
+    job = ResearchJobRepository(session).create("ORCL", "Analyze valuation.")
+    trace = GraphTraceRepository(session).save(
+        "ORCL",
+        {
+            "ticker": "ORCL",
+            "messages": [{"type": "human", "content": "Question"}],
+            "tool_results": [{"name": "get_company_facts", "content": {"revenue": 1}}],
+        },
+        job_id=job.id,
+    )
+    responses = ProviderResponseRepository(session).save_many(
+        [
+            {
+                "provider": "SEC",
+                "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0001341439.json",
+                "params": {},
+                "payload": {"facts": {"revenue": 1}},
+            }
+        ],
+        job_id=job.id,
+    )
+    ResearchJobRepository(session).mark_complete(job)
+    session.commit()
+
+    assert trace.messages_json[0]["type"] == "human"
+    assert trace.tool_results_json[0]["name"] == "get_company_facts"
+    assert responses[0].provider == "SEC"
+    assert responses[0].payload_json["facts"]["revenue"] == 1
+    assert job.status == "complete"
