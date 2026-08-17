@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from financial_research.agents.research_agent import RESEARCH_SYSTEM_PROMPT
+from financial_research.config.settings import get_settings
 from financial_research.graph.state import ResearchGraphState
 from financial_research.graph.verification import (
     collect_tool_results,
@@ -127,8 +128,21 @@ def create_research_graph(llm: Any | None = None, tools: Sequence[Any] | None = 
 
 
 def run_research_graph(ticker: str, research_question: str, llm: Any | None = None) -> ResearchGraphState:
+    settings = get_settings()
     graph = create_research_graph(llm=llm)
-    return graph.invoke({"ticker": ticker, "research_question": research_question}, {"recursion_limit": 16})
+    return graph.invoke(
+        {"ticker": ticker, "research_question": research_question},
+        {
+            "recursion_limit": 16,
+            "run_name": "financial-research",
+            "tags": ["financial-research", ticker.upper(), settings.environment],
+            "metadata": {
+                "ticker": ticker.upper(),
+                "environment": settings.environment,
+                "langsmith_tracing_enabled": settings.langchain_tracing_v2,
+            },
+        },
+    )
 
 
 def _last_ai_message_text(messages: list[Any]) -> str:

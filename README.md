@@ -178,6 +178,21 @@ DATABASE_PERSISTENCE_ENABLED=false
 DATABASE_STORE_RAW_PROVIDER_PAYLOADS=false
 ```
 
+## LangSmith Tracing
+
+LangSmith tracing is optional and disabled by default. To send LangChain and LangGraph runs to LangSmith, add the following to `.env`:
+
+```env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_PROJECT=financial-research-agent
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+```
+
+Restart the backend after changing these values. Each research graph run is tagged with the ticker and environment and includes metadata identifying the run. View traces in the configured LangSmith project at [smith.langchain.com](https://smith.langchain.com/).
+
+The application continues to write local Markdown, raw JSON, filesystem, and optional database artifacts when LangSmith is disabled. Do not put provider API keys or sensitive research data into tags or metadata.
+
 ## Run The Backend
 
 ```powershell

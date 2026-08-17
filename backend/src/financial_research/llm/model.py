@@ -1,9 +1,21 @@
+import os
+
 from financial_research.config.settings import Settings, get_settings
+
+
+def configure_langsmith_tracing(settings: Settings) -> None:
+    """Configure LangChain's optional LangSmith callback integration."""
+    os.environ["LANGCHAIN_TRACING_V2"] = "true" if settings.langchain_tracing_v2 else "false"
+    os.environ["LANGCHAIN_PROJECT"] = settings.langchain_project
+    os.environ["LANGCHAIN_ENDPOINT"] = settings.langchain_endpoint
+    if settings.langchain_api_key:
+        os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
 
 
 def get_llm(settings: Settings | None = None):
     """Return the configured chat model without exposing provider details elsewhere."""
     settings = settings or get_settings()
+    configure_langsmith_tracing(settings)
     provider = settings.llm_provider.lower()
 
     if provider == "groq":

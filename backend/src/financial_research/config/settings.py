@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     sec_company_facts_history_limit: int = 5
     database_persistence_enabled: bool = False
     database_store_raw_provider_payloads: bool = False
+    langchain_tracing_v2: bool = False
+    langchain_api_key: str | None = None
+    langchain_project: str = "financial-research-agent"
+    langchain_endpoint: str = "https://api.smith.langchain.com"
 
     llm_provider: str = "groq"
     groq_api_key: str | None = None
